@@ -50,6 +50,7 @@ Desktop.ini
 # appsettings.Production.json
 
 appsettings.json
+appsettings.Development.json
 
 # CỰC KỲ QUAN TRỌNG: Tránh push thông tin cấu hình nhạy cảm (Connection String, Key...) lên Git.
 # Thay vì dùng file này, hãy dùng Secret Manager (dotnet user-secrets) khi dev.
