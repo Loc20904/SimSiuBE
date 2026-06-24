@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using ViettalAPI.Data;
+using ViettalAPI.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -51,6 +52,9 @@ builder.Services.AddSwaggerGen(options =>
 // 3. Register DbContext using SQL Server
 builder.Services.AddDbContext<ViettalDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+// 3.5 Register GeminiService
+builder.Services.AddHttpClient<IGeminiService, GeminiService>();
 
 // 4. Configure CORS
 builder.Services.AddCors(options =>

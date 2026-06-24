@@ -1,0 +1,84 @@
+## #######################################################################
+## 1. .NET / C# - Build and Output Outputs
+## #######################################################################
+bin/
+obj/
+[Bb]in/
+[Oo]bj/
+out/
+
+## #######################################################################
+## 2. Visual Studio - IDE Files and Folders
+## #######################################################################
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+## Khách hàng/Công cụ test tự sinh
+Generated\ Files/
+
+## Test kết quả và Coverage
+*.trx
+*.md.user
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+## #######################################################################
+## 3. Visual Studio Code - IDE Settings
+## #######################################################################
+.vscode/
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/tasks.json
+
+## #######################################################################
+## 4. JetBrains Rider / Resharper
+## #######################################################################
+.idea/
+*.sln.iml
+
+## #######################################################################
+## 5. ASP.NET Core - Các file cấu hình môi trường và bảo mật
+## #######################################################################
+# Thư mục chứa các chứng chỉ SSL cá nhân khi dev
+.aspnet/
+
+# BỎ CHÚ THÍCH dòng dưới nếu bạn muốn giữ file appsettings local tránh đè lên server
+# appsettings.Production.json
+
+appsettings.json
+
+# CỰC KỲ QUAN TRỌNG: Tránh push thông tin cấu hình nhạy cảm (Connection String, Key...) lên Git.
+# Thay vì dùng file này, hãy dùng Secret Manager (dotnet user-secrets) khi dev.
+appsettings.Development.json
+
+## #######################################################################
+## 6. Entity Framework Core (Migrations & DB)
+## #######################################################################
+# File database local tự sinh nếu dùng SQL Server Express / SQLite
+*.db
+*.database
+*.sqlite
+*.mdf
+*.ldf
+
+## #######################################################################
+## 7. Node / Packages / Front-end (Nếu dự án có tích hợp)
+## #######################################################################
+node_modules/
+/wwwroot/lib/
+.npm/
+
+## #######################################################################
+## 8. OS Generated Files (Mac và Windows)
+## #######################################################################
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
