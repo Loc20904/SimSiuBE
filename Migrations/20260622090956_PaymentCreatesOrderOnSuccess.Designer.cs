@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using ViettalAPI.Data;
 
@@ -11,9 +12,11 @@ using ViettalAPI.Data;
 namespace ViettalAPI.Migrations
 {
     [DbContext(typeof(ViettalDbContext))]
-    partial class ViettalDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260622090956_PaymentCreatesOrderOnSuccess")]
+    partial class PaymentCreatesOrderOnSuccess
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -61,7 +64,7 @@ namespace ViettalAPI.Migrations
                             Id = "user-customer",
                             Email = "customer@simdep.vn",
                             FullName = "Nguyễn Văn Khách",
-                            Password = "$2a$11$eILfE3WJqz8d2/o/f/ulpe7P4lSRZ6DPLmvxpGjQ7AVRu1/f3KeHi",
+                            Password = "$2a$11$WDFt/5hAYm6aZ17/L6nYFeNi4mdwMmN63WcfTp4W4YgarMaWfkGrO",
                             Phone = "0909000000",
                             Role = "Customer"
                         },
@@ -70,7 +73,7 @@ namespace ViettalAPI.Migrations
                             Id = "user-admin",
                             Email = "admin@simdep.vn",
                             FullName = "Quản trị viên",
-                            Password = "$2a$11$PwaM/pv.hHiX1b.Gbm4dkOs9AhK73uGEGgLYL0264rBCKmryLzdsC",
+                            Password = "$2a$11$TIjiUuusqaiy8Kjy/vb.yumsN1owztUj9f/am0ltOJ8tJsQmhYfMy",
                             Phone = "0909999999",
                             Role = "Admin"
                         });
@@ -228,9 +231,6 @@ namespace ViettalAPI.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
-                    b.Property<DateTime>("ExpiredAt")
-                        .HasColumnType("datetime2");
-
                     b.Property<string>("Note")
                         .IsRequired()
                         .HasMaxLength(500)
@@ -351,7 +351,7 @@ namespace ViettalAPI.Migrations
                         {
                             Id = "ORD-1001",
                             Address = "Thành phố Hồ Chí Minh",
-                            CreatedAt = new DateTime(2026, 6, 22, 5, 32, 12, 668, DateTimeKind.Utc).AddTicks(9212),
+                            CreatedAt = new DateTime(2026, 6, 22, 5, 9, 54, 798, DateTimeKind.Utc).AddTicks(7757),
                             Note = "Giao hàng giờ hành chính",
                             ReceiverName = "Nguyễn Văn Khách",
                             ReceiverPhone = "0909000000",
@@ -364,7 +364,7 @@ namespace ViettalAPI.Migrations
                         {
                             Id = "ORD-1002",
                             Address = "Hà Nội",
-                            CreatedAt = new DateTime(2026, 6, 20, 9, 32, 12, 668, DateTimeKind.Utc).AddTicks(9222),
+                            CreatedAt = new DateTime(2026, 6, 20, 9, 9, 54, 798, DateTimeKind.Utc).AddTicks(7768),
                             Note = "",
                             ReceiverName = "Nguyễn Văn Khách",
                             ReceiverPhone = "0909000000",

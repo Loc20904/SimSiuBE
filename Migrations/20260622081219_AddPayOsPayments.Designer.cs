@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using ViettalAPI.Data;
 
@@ -11,9 +12,11 @@ using ViettalAPI.Data;
 namespace ViettalAPI.Migrations
 {
     [DbContext(typeof(ViettalDbContext))]
-    partial class ViettalDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260622081219_AddPayOsPayments")]
+    partial class AddPayOsPayments
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -61,7 +64,7 @@ namespace ViettalAPI.Migrations
                             Id = "user-customer",
                             Email = "customer@simdep.vn",
                             FullName = "Nguyễn Văn Khách",
-                            Password = "$2a$11$eILfE3WJqz8d2/o/f/ulpe7P4lSRZ6DPLmvxpGjQ7AVRu1/f3KeHi",
+                            Password = "$2a$11$kgWEa3uM10gdaOF2tkplLOuUVkor2nNNEFtLBlejlMfolN0dXo8Uu",
                             Phone = "0909000000",
                             Role = "Customer"
                         },
@@ -70,7 +73,7 @@ namespace ViettalAPI.Migrations
                             Id = "user-admin",
                             Email = "admin@simdep.vn",
                             FullName = "Quản trị viên",
-                            Password = "$2a$11$PwaM/pv.hHiX1b.Gbm4dkOs9AhK73uGEGgLYL0264rBCKmryLzdsC",
+                            Password = "$2a$11$FYNMSA08MVS.mYe2drJmAe.v2M/CGsJ3VMVgUvVQ.p6pEWsOGLsWG",
                             Phone = "0909999999",
                             Role = "Admin"
                         });
@@ -213,11 +216,6 @@ namespace ViettalAPI.Migrations
                     b.Property<string>("Id")
                         .HasColumnType("nvarchar(450)");
 
-                    b.Property<string>("Address")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
-
                     b.Property<int>("Amount")
                         .HasColumnType("int");
 
@@ -228,15 +226,8 @@ namespace ViettalAPI.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2");
 
-                    b.Property<DateTime>("ExpiredAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("Note")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
-
                     b.Property<string>("OrderId")
+                        .IsRequired()
                         .HasColumnType("nvarchar(450)");
 
                     b.Property<DateTime?>("PaidAt")
@@ -264,30 +255,12 @@ namespace ViettalAPI.Migrations
                     b.Property<string>("RawWebhookJson")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<string>("ReceiverName")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<string>("ReceiverPhone")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)");
-
-                    b.Property<string>("SimId")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("datetime2");
-
-                    b.Property<string>("UserId")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
 
                     b.HasKey("Id");
 
@@ -351,7 +324,7 @@ namespace ViettalAPI.Migrations
                         {
                             Id = "ORD-1001",
                             Address = "Thành phố Hồ Chí Minh",
-                            CreatedAt = new DateTime(2026, 6, 22, 5, 32, 12, 668, DateTimeKind.Utc).AddTicks(9212),
+                            CreatedAt = new DateTime(2026, 6, 22, 4, 12, 17, 622, DateTimeKind.Utc).AddTicks(5150),
                             Note = "Giao hàng giờ hành chính",
                             ReceiverName = "Nguyễn Văn Khách",
                             ReceiverPhone = "0909000000",
@@ -364,7 +337,7 @@ namespace ViettalAPI.Migrations
                         {
                             Id = "ORD-1002",
                             Address = "Hà Nội",
-                            CreatedAt = new DateTime(2026, 6, 20, 9, 32, 12, 668, DateTimeKind.Utc).AddTicks(9222),
+                            CreatedAt = new DateTime(2026, 6, 20, 8, 12, 17, 622, DateTimeKind.Utc).AddTicks(5159),
                             Note = "",
                             ReceiverName = "Nguyễn Văn Khách",
                             ReceiverPhone = "0909000000",
@@ -380,7 +353,8 @@ namespace ViettalAPI.Migrations
                     b.HasOne("ViettalAPI.Models.SimOrder", "Order")
                         .WithMany()
                         .HasForeignKey("OrderId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.Navigation("Order");
                 });

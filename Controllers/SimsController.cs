@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ViettalAPI.Data;
 using ViettalAPI.Models;
+using ViettalAPI.Services;
 
 namespace ViettalAPI.Controllers
 {
@@ -11,16 +12,19 @@ namespace ViettalAPI.Controllers
     public class SimsController : ControllerBase
     {
         private readonly ViettalDbContext _context;
+        private readonly IPaymentExpirationService _paymentExpirationService;
 
-        public SimsController(ViettalDbContext context)
+        public SimsController(ViettalDbContext context, IPaymentExpirationService paymentExpirationService)
         {
             _context = context;
+            _paymentExpirationService = paymentExpirationService;
         }
 
         // GET: api/sims
         [HttpGet]
         public async Task<ActionResult<IEnumerable<BeautifulSim>>> GetSims()
         {
+            await _paymentExpirationService.ReleaseExpiredPaymentsAsync();
             return await _context.Sims.ToListAsync();
         }
 
@@ -28,6 +32,7 @@ namespace ViettalAPI.Controllers
         [HttpGet("{id}")]
         public async Task<ActionResult<BeautifulSim>> GetSim(string id)
         {
+            await _paymentExpirationService.ReleaseExpiredPaymentsAsync();
             var sim = await _context.Sims.FindAsync(id);
 
             if (sim == null)

@@ -56,6 +56,14 @@ builder.Services.AddDbContext<ViettalDbContext>(options =>
 // 3.5 Register GeminiService
 builder.Services.AddHttpClient<IGeminiService, GeminiService>();
 
+builder.Services.Configure<PayOsOptions>(builder.Configuration.GetSection("PayOS"));
+builder.Services.AddScoped<IPaymentExpirationService, PaymentExpirationService>();
+builder.Services.AddHttpClient<IPayOsService, PayOsService>((serviceProvider, client) =>
+{
+    var options = serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<PayOsOptions>>().Value;
+    client.BaseAddress = new Uri(options.BaseUrl);
+});
+
 // 4. Configure CORS
 builder.Services.AddCors(options =>
 {
