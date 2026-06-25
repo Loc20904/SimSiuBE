@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using ViettalAPI.Data;
+using ViettalAPI.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -51,6 +52,14 @@ builder.Services.AddSwaggerGen(options =>
 // 3. Register DbContext using SQL Server
 builder.Services.AddDbContext<ViettalDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+builder.Services.Configure<PayOsOptions>(builder.Configuration.GetSection("PayOS"));
+builder.Services.AddScoped<IPaymentExpirationService, PaymentExpirationService>();
+builder.Services.AddHttpClient<IPayOsService, PayOsService>((serviceProvider, client) =>
+{
+    var options = serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<PayOsOptions>>().Value;
+    client.BaseAddress = new Uri(options.BaseUrl);
+});
 
 // 4. Configure CORS
 builder.Services.AddCors(options =>

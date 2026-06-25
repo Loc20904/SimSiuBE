@@ -12,6 +12,7 @@ namespace ViettalAPI.Data
         public DbSet<AppUser> Users => Set<AppUser>();
         public DbSet<BeautifulSim> Sims => Set<BeautifulSim>();
         public DbSet<SimOrder> Orders => Set<SimOrder>();
+        public DbSet<PaymentTransaction> PaymentTransactions => Set<PaymentTransaction>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -29,6 +30,24 @@ namespace ViettalAPI.Data
             modelBuilder.Entity<SimOrder>()
                 .Property(o => o.Status)
                 .HasConversion<string>();
+
+            modelBuilder.Entity<PaymentTransaction>()
+                .Property(p => p.Provider)
+                .HasConversion<string>();
+
+            modelBuilder.Entity<PaymentTransaction>()
+                .Property(p => p.Status)
+                .HasConversion<string>();
+
+            modelBuilder.Entity<PaymentTransaction>()
+                .HasIndex(p => p.PayOsOrderCode)
+                .IsUnique();
+
+            modelBuilder.Entity<PaymentTransaction>()
+                .HasOne(p => p.Order)
+                .WithMany()
+                .HasForeignKey(p => p.OrderId)
+                .OnDelete(DeleteBehavior.SetNull);
 
             // Seed Users (Customer password: '123456', Admin password: 'admin123')
             var customerHash = BCrypt.Net.BCrypt.HashPassword("123456");

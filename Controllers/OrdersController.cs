@@ -89,8 +89,8 @@ namespace ViettalAPI.Controllers
                     order.Status = OrderStatus.Pending;
                     order.CreatedAt = DateTime.UtcNow;
 
-                    // Update Sim status to Sold
-                    sim.Status = SimStatus.Sold;
+                    // Manual orders reserve the SIM until an admin confirms/completes the order.
+                    sim.Status = SimStatus.Reserved;
 
                     _context.Orders.Add(order);
                     await _context.SaveChangesAsync();
@@ -127,20 +127,24 @@ namespace ViettalAPI.Controllers
                     var sim = await _context.Sims.FindAsync(order.SimId);
                     if (sim != null)
                     {
-                        if (dto.Status == OrderStatus.Completed || dto.Status == OrderStatus.Confirmed)
+                        if (dto.Status == OrderStatus.Completed || dto.Status == OrderStatus.Confirmed || dto.Status == OrderStatus.Paid)
                         {
                             sim.Status = SimStatus.Sold;
                         }
-                        else if (dto.Status == OrderStatus.Cancelled || dto.Status == OrderStatus.Pending)
+                        else if (dto.Status == OrderStatus.Cancelled || dto.Status == OrderStatus.Pending || dto.Status == OrderStatus.PaymentExpired)
                         {
                             // Verify if there are no other active confirmed/completed orders for this SIM before restoring to available
                             var otherSoldActiveOrdersExist = await _context.Orders
                                 .AnyAsync(o => o.SimId == order.SimId && o.Id != id && 
-                                               (o.Status == OrderStatus.Confirmed || o.Status == OrderStatus.Completed));
+                                               (o.Status == OrderStatus.Confirmed || o.Status == OrderStatus.Completed || o.Status == OrderStatus.Paid));
                             if (!otherSoldActiveOrdersExist)
                             {
                                 sim.Status = SimStatus.Available;
                             }
+                        }
+                        else if (dto.Status == OrderStatus.PendingPayment)
+                        {
+                            sim.Status = SimStatus.Reserved;
                         }
                     }
 
@@ -174,7 +178,7 @@ namespace ViettalAPI.Controllers
                 return Forbid();
             }
 
-            if (order.Status != OrderStatus.Pending)
+            if (order.Status != OrderStatus.Pending && order.Status != OrderStatus.PendingPayment)
             {
                 return BadRequest(new { message = "Chỉ có thể hủy các đơn hàng đang ở trạng thái chờ xử lý." });
             }
@@ -191,7 +195,7 @@ namespace ViettalAPI.Controllers
                         // Verify if there are no other active confirmed/completed orders for this SIM
                         var otherSoldActiveOrdersExist = await _context.Orders
                             .AnyAsync(o => o.SimId == order.SimId && o.Id != id && 
-                                           (o.Status == OrderStatus.Confirmed || o.Status == OrderStatus.Completed));
+                                           (o.Status == OrderStatus.Confirmed || o.Status == OrderStatus.Completed || o.Status == OrderStatus.Paid));
                         if (!otherSoldActiveOrdersExist)
                         {
                             sim.Status = SimStatus.Available;
