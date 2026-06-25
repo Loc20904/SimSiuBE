@@ -10,6 +10,7 @@ namespace ViettalAPI.Services
     public interface IPayOsService
     {
         Task<PayOsCreatePaymentResult> CreatePaymentLinkAsync(PayOsCreatePaymentRequest request);
+        Task<PayOsPaymentLinkInfo> GetPaymentLinkAsync(long orderCode);
         bool IsValidWebhookSignature<TData>(TData data, string signature);
     }
 
@@ -65,6 +66,33 @@ namespace ViettalAPI.Services
             if (payOsResponse.Code != "00" || payOsResponse.Data == null)
             {
                 throw new InvalidOperationException($"payOS rejected payment link request: {payOsResponse.Desc}");
+            }
+
+            return payOsResponse.Data;
+        }
+
+        public async Task<PayOsPaymentLinkInfo> GetPaymentLinkAsync(long orderCode)
+        {
+            EnsureConfigured();
+
+            using var httpRequest = new HttpRequestMessage(HttpMethod.Get, $"/v2/payment-requests/{orderCode}");
+            httpRequest.Headers.Add("x-client-id", _options.ClientId);
+            httpRequest.Headers.Add("x-api-key", _options.ApiKey);
+
+            using var response = await _httpClient.SendAsync(httpRequest);
+            var body = await response.Content.ReadAsStringAsync();
+
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new InvalidOperationException($"payOS returned HTTP {(int)response.StatusCode}: {body}");
+            }
+
+            var payOsResponse = JsonSerializer.Deserialize<PayOsPaymentLinkResponse>(body, _jsonOptions)
+                ?? throw new InvalidOperationException("payOS response is empty.");
+
+            if (payOsResponse.Code != "00" || payOsResponse.Data == null)
+            {
+                throw new InvalidOperationException($"payOS rejected payment status request: {payOsResponse.Desc}");
             }
 
             return payOsResponse.Data;
@@ -180,5 +208,31 @@ namespace ViettalAPI.Services
         public string Status { get; set; } = string.Empty;
         public string CheckoutUrl { get; set; } = string.Empty;
         public string QrCode { get; set; } = string.Empty;
+    }
+
+    public class PayOsPaymentLinkResponse
+    {
+        public string Code { get; set; } = string.Empty;
+        public string Desc { get; set; } = string.Empty;
+        public PayOsPaymentLinkInfo? Data { get; set; }
+        public string Signature { get; set; } = string.Empty;
+    }
+
+    public class PayOsPaymentLinkInfo
+    {
+        public long OrderCode { get; set; }
+        public int Amount { get; set; }
+        public int AmountPaid { get; set; }
+        public int AmountRemaining { get; set; }
+        public string Status { get; set; } = string.Empty;
+        public string PaymentLinkId { get; set; } = string.Empty;
+        public List<PayOsTransactionInfo> Transactions { get; set; } = new();
+    }
+
+    public class PayOsTransactionInfo
+    {
+        public string Reference { get; set; } = string.Empty;
+        public int Amount { get; set; }
+        public string TransactionDateTime { get; set; } = string.Empty;
     }
 }

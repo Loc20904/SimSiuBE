@@ -106,8 +106,8 @@ namespace ViettalAPI.Controllers
                             Price = sim.Price
                         }
                     },
-                    CancelUrl = $"{_payOsOptions.CancelUrl}?simId={Uri.EscapeDataString(payment.SimId)}",
-                    ReturnUrl = $"{_payOsOptions.ReturnUrl}?simId={Uri.EscapeDataString(payment.SimId)}",
+                    CancelUrl = $"{_payOsOptions.CancelUrl}?simId={Uri.EscapeDataString(payment.SimId)}&orderCode={payment.PayOsOrderCode}",
+                    ReturnUrl = $"{_payOsOptions.ReturnUrl}?simId={Uri.EscapeDataString(payment.SimId)}&orderCode={payment.PayOsOrderCode}",
                     ExpiredAt = new DateTimeOffset(expiredAt).ToUnixTimeSeconds()
                 });
 
@@ -131,6 +131,95 @@ namespace ViettalAPI.Controllers
             {
                 await transaction.RollbackAsync();
                 return StatusCode(500, new { message = "Loi khi tao thanh toan payOS: " + ex.Message });
+            }
+        }
+
+        [HttpPost("payos/{orderCode:long}/cancel")]
+        [Authorize]
+        public async Task<IActionResult> CancelPayOsPayment(long orderCode)
+        {
+            var currentUserId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            var payment = await _context.PaymentTransactions
+                .FirstOrDefaultAsync(p => p.PayOsOrderCode == orderCode && p.UserId == currentUserId);
+
+            if (payment == null)
+            {
+                return NotFound(new { message = "Khong tim thay giao dich thanh toan." });
+            }
+
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                if (payment.Status == PaymentStatus.Pending)
+                {
+                    var sim = await _context.Sims.FindAsync(payment.SimId);
+                    await ReleasePaymentAsync(payment, sim, PaymentStatus.Cancelled);
+                }
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+                return Ok(new { status = payment.Status.ToString() });
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                return StatusCode(500, new { message = "Loi khi huy thanh toan payOS: " + ex.Message });
+            }
+        }
+
+        [HttpPost("payos/{orderCode:long}/sync")]
+        [Authorize]
+        public async Task<IActionResult> SyncPayOsPayment(long orderCode)
+        {
+            var currentUserId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            var payment = await _context.PaymentTransactions
+                .FirstOrDefaultAsync(p => p.PayOsOrderCode == orderCode && p.UserId == currentUserId);
+
+            if (payment == null)
+            {
+                return NotFound(new { message = "Khong tim thay giao dich thanh toan." });
+            }
+
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                var linkInfo = await _payOsService.GetPaymentLinkAsync(orderCode);
+                var sim = await _context.Sims.FindAsync(payment.SimId);
+                payment.PaymentLinkId = string.IsNullOrWhiteSpace(linkInfo.PaymentLinkId)
+                    ? payment.PaymentLinkId
+                    : linkInfo.PaymentLinkId;
+                payment.UpdatedAt = DateTime.UtcNow;
+
+                var status = linkInfo.Status.Trim().ToUpperInvariant();
+                if (status == "PAID")
+                {
+                    if (linkInfo.Amount != 0 && linkInfo.Amount != payment.Amount)
+                    {
+                        await ReleasePaymentAsync(payment, sim, PaymentStatus.Failed);
+                        await _context.SaveChangesAsync();
+                        await transaction.CommitAsync();
+                        return BadRequest(new { message = "So tien thanh toan khong khop." });
+                    }
+
+                    await MarkPaymentPaidAsync(payment, sim, linkInfo.Transactions.FirstOrDefault()?.Reference);
+                }
+                else if (status == "CANCELLED" || status == "CANCELED")
+                {
+                    await ReleasePaymentAsync(payment, sim, PaymentStatus.Cancelled);
+                }
+                else if (status == "EXPIRED")
+                {
+                    await ReleasePaymentAsync(payment, sim, PaymentStatus.Expired);
+                }
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+                return Ok(new { status = payment.Status.ToString(), orderId = payment.OrderId ?? string.Empty });
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                return StatusCode(500, new { message = "Loi khi dong bo thanh toan payOS: " + ex.Message });
             }
         }
 
@@ -162,58 +251,19 @@ namespace ViettalAPI.Controllers
                 {
                     if (request.Data.Amount != payment.Amount)
                     {
-                        payment.Status = PaymentStatus.Failed;
-                        if (sim != null)
-                        {
-                            sim.Status = SimStatus.Available;
-                        }
+                        await ReleasePaymentAsync(payment, sim, PaymentStatus.Failed);
 
                         await _context.SaveChangesAsync();
                         await transaction.CommitAsync();
                         return BadRequest(new { message = "So tien thanh toan khong khop." });
                     }
 
-                    if (payment.Status != PaymentStatus.Paid)
-                    {
-                        payment.Status = PaymentStatus.Paid;
-                        payment.PayOsReference = request.Data.Reference;
-                        payment.PaymentLinkId = request.Data.PaymentLinkId;
-                        payment.PaidAt = DateTime.UtcNow;
-
-                        if (string.IsNullOrWhiteSpace(payment.OrderId))
-                        {
-                            var order = new SimOrder
-                            {
-                                Id = "ORD-" + DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
-                                UserId = payment.UserId,
-                                SimId = payment.SimId,
-                                ReceiverName = payment.ReceiverName,
-                                ReceiverPhone = payment.ReceiverPhone,
-                                Address = payment.Address,
-                                TotalPrice = payment.Amount,
-                                Status = OrderStatus.Paid,
-                                CreatedAt = DateTime.UtcNow,
-                                Note = payment.Note
-                            };
-
-                            _context.Orders.Add(order);
-                            payment.OrderId = order.Id;
-                        }
-
-                        if (sim != null)
-                        {
-                            sim.Status = SimStatus.Sold;
-                        }
-                    }
+                    payment.PaymentLinkId = request.Data.PaymentLinkId;
+                    await MarkPaymentPaidAsync(payment, sim, request.Data.Reference);
                 }
                 else if (payment.Status == PaymentStatus.Pending)
                 {
-                    payment.Status = PaymentStatus.Failed;
-
-                    if (sim != null)
-                    {
-                        sim.Status = SimStatus.Available;
-                    }
+                    await ReleasePaymentAsync(payment, sim, PaymentStatus.Failed);
                 }
 
                 await _context.SaveChangesAsync();
@@ -224,6 +274,65 @@ namespace ViettalAPI.Controllers
             {
                 await transaction.RollbackAsync();
                 return StatusCode(500, new { message = "Loi khi xu ly webhook payOS: " + ex.Message });
+            }
+        }
+
+        private async Task MarkPaymentPaidAsync(PaymentTransaction payment, BeautifulSim? sim, string? reference)
+        {
+            if (payment.Status == PaymentStatus.Paid)
+            {
+                return;
+            }
+
+            payment.Status = PaymentStatus.Paid;
+            payment.PayOsReference = reference;
+            payment.PaidAt = DateTime.UtcNow;
+            payment.UpdatedAt = DateTime.UtcNow;
+
+            if (string.IsNullOrWhiteSpace(payment.OrderId))
+            {
+                var order = new SimOrder
+                {
+                    Id = "ORD-" + DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                    UserId = payment.UserId,
+                    SimId = payment.SimId,
+                    ReceiverName = payment.ReceiverName,
+                    ReceiverPhone = payment.ReceiverPhone,
+                    Address = payment.Address,
+                    TotalPrice = payment.Amount,
+                    Status = OrderStatus.Paid,
+                    CreatedAt = DateTime.UtcNow,
+                    Note = payment.Note
+                };
+
+                _context.Orders.Add(order);
+                payment.OrderId = order.Id;
+            }
+
+            if (sim != null)
+            {
+                sim.Status = SimStatus.Sold;
+            }
+
+            await Task.CompletedTask;
+        }
+
+        private async Task ReleasePaymentAsync(PaymentTransaction payment, BeautifulSim? sim, PaymentStatus status)
+        {
+            payment.Status = status;
+            payment.UpdatedAt = DateTime.UtcNow;
+
+            if (sim != null && sim.Status == SimStatus.Reserved)
+            {
+                var hasOtherActivePayment = await _context.PaymentTransactions.AnyAsync(other =>
+                    other.Id != payment.Id &&
+                    other.SimId == payment.SimId &&
+                    (other.Status == PaymentStatus.Pending || other.Status == PaymentStatus.Paid));
+
+                if (!hasOtherActivePayment)
+                {
+                    sim.Status = SimStatus.Available;
+                }
             }
         }
     }
