@@ -259,6 +259,81 @@ namespace ViettalAPI.Controllers
             }
         }
 
+        [HttpGet("payos/pending")]
+        [Authorize]
+        public async Task<ActionResult<IEnumerable<PendingPayOsPaymentResponse>>> GetPendingPayOsPayments()
+        {
+            var currentUserId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrWhiteSpace(currentUserId))
+            {
+                return Unauthorized();
+            }
+
+            await _paymentExpirationService.ReleaseExpiredPaymentsAsync();
+
+            var pendingPayments = await _context.PaymentTransactions
+                .Where(payment => payment.UserId == currentUserId && payment.Status == PaymentStatus.Pending)
+                .OrderByDescending(payment => payment.CreatedAt)
+                .ToListAsync();
+
+            if (pendingPayments.Count > 0)
+            {
+                using var transaction = await _context.Database.BeginTransactionAsync();
+                try
+                {
+                    foreach (var payment in pendingPayments)
+                    {
+                        var sim = await _context.Sims.FindAsync(payment.SimId);
+                        try
+                        {
+                            await SyncSinglePaymentAsync(payment, sim);
+                        }
+                        catch
+                        {
+                            // Keep the payment visible as pending if payOS cannot be reached right now.
+                        }
+                    }
+
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+                }
+                catch (Exception ex)
+                {
+                    await transaction.RollbackAsync();
+                    return StatusCode(500, new { message = "Loi khi lay thanh toan dang cho: " + ex.Message });
+                }
+            }
+
+            var activePendingPayments = await _context.PaymentTransactions
+                .Where(payment => payment.UserId == currentUserId && payment.Status == PaymentStatus.Pending)
+                .OrderByDescending(payment => payment.CreatedAt)
+                .ToListAsync();
+
+            var now = DateTime.UtcNow;
+            var response = activePendingPayments
+                .Select(payment => new PendingPayOsPaymentResponse
+                {
+                    Id = payment.Id,
+                    UserId = payment.UserId,
+                    SimId = payment.SimId,
+                    PayOsOrderCode = payment.PayOsOrderCode,
+                    PaymentLinkId = payment.PaymentLinkId ?? string.Empty,
+                    CheckoutUrl = payment.CheckoutUrl ?? string.Empty,
+                    ReceiverName = payment.ReceiverName,
+                    ReceiverPhone = payment.ReceiverPhone,
+                    Address = payment.Address,
+                    Note = payment.Note,
+                    Amount = payment.Amount,
+                    Status = payment.Status.ToString(),
+                    CreatedAt = payment.CreatedAt,
+                    ExpiredAt = payment.ExpiredAt,
+                    RemainingSeconds = Math.Max(0, (int)(payment.ExpiredAt - now).TotalSeconds)
+                })
+                .ToList();
+
+            return Ok(response);
+        }
+
         [HttpPost("payos/webhook")]
         [AllowAnonymous]
         public async Task<IActionResult> PayOsWebhook([FromBody] PayOsWebhookRequest request)
@@ -419,6 +494,25 @@ namespace ViettalAPI.Controllers
             public static PaymentSyncResult Valid() => new(true, string.Empty);
 
             public static PaymentSyncResult Invalid(string message) => new(false, message);
+        }
+
+        public class PendingPayOsPaymentResponse
+        {
+            public string Id { get; set; } = string.Empty;
+            public string UserId { get; set; } = string.Empty;
+            public string SimId { get; set; } = string.Empty;
+            public long PayOsOrderCode { get; set; }
+            public string PaymentLinkId { get; set; } = string.Empty;
+            public string CheckoutUrl { get; set; } = string.Empty;
+            public string ReceiverName { get; set; } = string.Empty;
+            public string ReceiverPhone { get; set; } = string.Empty;
+            public string Address { get; set; } = string.Empty;
+            public string Note { get; set; } = string.Empty;
+            public int Amount { get; set; }
+            public string Status { get; set; } = string.Empty;
+            public DateTime CreatedAt { get; set; }
+            public DateTime ExpiredAt { get; set; }
+            public int RemainingSeconds { get; set; }
         }
     }
 }
