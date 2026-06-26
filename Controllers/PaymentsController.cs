@@ -183,33 +183,13 @@ namespace ViettalAPI.Controllers
             using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
-                var linkInfo = await _payOsService.GetPaymentLinkAsync(orderCode);
                 var sim = await _context.Sims.FindAsync(payment.SimId);
-                payment.PaymentLinkId = string.IsNullOrWhiteSpace(linkInfo.PaymentLinkId)
-                    ? payment.PaymentLinkId
-                    : linkInfo.PaymentLinkId;
-                payment.UpdatedAt = DateTime.UtcNow;
-
-                var status = linkInfo.Status.Trim().ToUpperInvariant();
-                if (status == "PAID")
+                var result = await SyncSinglePaymentAsync(payment, sim);
+                if (!result.IsValid)
                 {
-                    if (linkInfo.Amount != 0 && linkInfo.Amount != payment.Amount)
-                    {
-                        await ReleasePaymentAsync(payment, sim, PaymentStatus.Failed);
-                        await _context.SaveChangesAsync();
-                        await transaction.CommitAsync();
-                        return BadRequest(new { message = "So tien thanh toan khong khop." });
-                    }
-
-                    await MarkPaymentPaidAsync(payment, sim, linkInfo.Transactions.FirstOrDefault()?.Reference);
-                }
-                else if (status == "CANCELLED" || status == "CANCELED")
-                {
-                    await ReleasePaymentAsync(payment, sim, PaymentStatus.Cancelled);
-                }
-                else if (status == "EXPIRED")
-                {
-                    await ReleasePaymentAsync(payment, sim, PaymentStatus.Expired);
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+                    return BadRequest(new { message = result.Message });
                 }
 
                 await _context.SaveChangesAsync();
@@ -220,6 +200,62 @@ namespace ViettalAPI.Controllers
             {
                 await transaction.RollbackAsync();
                 return StatusCode(500, new { message = "Loi khi dong bo thanh toan payOS: " + ex.Message });
+            }
+        }
+
+        [HttpPost("payos/sync-pending")]
+        [Authorize]
+        public async Task<IActionResult> SyncPendingPayOsPayments()
+        {
+            var currentUserId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrWhiteSpace(currentUserId))
+            {
+                return Unauthorized();
+            }
+
+            await _paymentExpirationService.ReleaseExpiredPaymentsAsync();
+
+            var pendingPayments = await _context.PaymentTransactions
+                .Where(payment => payment.UserId == currentUserId && payment.Status == PaymentStatus.Pending)
+                .OrderByDescending(payment => payment.CreatedAt)
+                .ToListAsync();
+
+            var synced = 0;
+            var failedToSync = 0;
+
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                foreach (var payment in pendingPayments)
+                {
+                    var sim = await _context.Sims.FindAsync(payment.SimId);
+
+                    try
+                    {
+                        var result = await SyncSinglePaymentAsync(payment, sim);
+                        if (result.IsValid)
+                        {
+                            synced++;
+                        }
+                        else
+                        {
+                            failedToSync++;
+                        }
+                    }
+                    catch
+                    {
+                        failedToSync++;
+                    }
+                }
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+                return Ok(new { synced, failedToSync });
+            }
+            catch (Exception ex)
+            {
+                await transaction.RollbackAsync();
+                return StatusCode(500, new { message = "Loi khi dong bo cac thanh toan payOS: " + ex.Message });
             }
         }
 
@@ -275,6 +311,48 @@ namespace ViettalAPI.Controllers
                 await transaction.RollbackAsync();
                 return StatusCode(500, new { message = "Loi khi xu ly webhook payOS: " + ex.Message });
             }
+        }
+
+        private async Task<PaymentSyncResult> SyncSinglePaymentAsync(PaymentTransaction payment, BeautifulSim? sim)
+        {
+            if (payment.Status != PaymentStatus.Pending)
+            {
+                return PaymentSyncResult.Valid();
+            }
+
+            if (payment.ExpiredAt <= DateTime.UtcNow)
+            {
+                await ReleasePaymentAsync(payment, sim, PaymentStatus.Expired);
+                return PaymentSyncResult.Valid();
+            }
+
+            var linkInfo = await _payOsService.GetPaymentLinkAsync(payment.PayOsOrderCode);
+            payment.PaymentLinkId = string.IsNullOrWhiteSpace(linkInfo.PaymentLinkId)
+                ? payment.PaymentLinkId
+                : linkInfo.PaymentLinkId;
+            payment.UpdatedAt = DateTime.UtcNow;
+
+            var status = linkInfo.Status.Trim().ToUpperInvariant();
+            if (status == "PAID")
+            {
+                if (linkInfo.Amount != 0 && linkInfo.Amount != payment.Amount)
+                {
+                    await ReleasePaymentAsync(payment, sim, PaymentStatus.Failed);
+                    return PaymentSyncResult.Invalid("So tien thanh toan khong khop.");
+                }
+
+                await MarkPaymentPaidAsync(payment, sim, linkInfo.Transactions.FirstOrDefault()?.Reference);
+            }
+            else if (status == "CANCELLED" || status == "CANCELED")
+            {
+                await ReleasePaymentAsync(payment, sim, PaymentStatus.Cancelled);
+            }
+            else if (status == "EXPIRED")
+            {
+                await ReleasePaymentAsync(payment, sim, PaymentStatus.Expired);
+            }
+
+            return PaymentSyncResult.Valid();
         }
 
         private async Task MarkPaymentPaidAsync(PaymentTransaction payment, BeautifulSim? sim, string? reference)
@@ -334,6 +412,13 @@ namespace ViettalAPI.Controllers
                     sim.Status = SimStatus.Available;
                 }
             }
+        }
+
+        private readonly record struct PaymentSyncResult(bool IsValid, string Message)
+        {
+            public static PaymentSyncResult Valid() => new(true, string.Empty);
+
+            public static PaymentSyncResult Invalid(string message) => new(false, message);
         }
     }
 }
