@@ -304,13 +304,16 @@ namespace ViettalAPI.Controllers
                 }
             }
 
-            var activePendingPayments = await _context.PaymentTransactions
-                .Where(payment => payment.UserId == currentUserId && payment.Status == PaymentStatus.Pending)
+            var paymentHistory = await _context.PaymentTransactions
+                .Where(payment =>
+                    payment.UserId == currentUserId &&
+                    payment.Provider == PaymentProvider.PayOS &&
+                    payment.Status != PaymentStatus.Paid)
                 .OrderByDescending(payment => payment.CreatedAt)
                 .ToListAsync();
 
             var now = DateTime.UtcNow;
-            var response = activePendingPayments
+            var response = paymentHistory
                 .Select(payment => new PendingPayOsPaymentResponse
                 {
                     Id = payment.Id,
