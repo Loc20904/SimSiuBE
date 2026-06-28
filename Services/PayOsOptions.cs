@@ -8,6 +8,6 @@ namespace ViettalAPI.Services
         public string ChecksumKey { get; set; } = string.Empty;
         public string ReturnUrl { get; set; } = string.Empty;
         public string CancelUrl { get; set; } = string.Empty;
-        public int LinkExpirationMinutes { get; set; } = 15;
+        public int LinkExpirationMinutes { get; set; } = 2;
     }
 }
